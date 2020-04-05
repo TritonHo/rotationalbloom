@@ -29,7 +29,8 @@ type impl struct {
 
 	currentBloom *bloomfilter
 
-	// a lock to protect when the blooms is being updated
+	// a lock to protect the meta structure of the blooms and locations
+	// it protect on the object pointer, NOT the content inside the object
 	metaLock sync.RWMutex
 
 	// the lock to protect against concurrent update on the locations
@@ -60,8 +61,13 @@ func (im *impl) GetAppxCount() int {
 func (im *impl) Check(s string) bool {
 	im.metaLock.RLock()
 	defer im.metaLock.RUnlock()
+	for _, b := range im.oldBlooms {
+		if b.Check(s) {
+			return true
+		}
+	}
 
-	return im.currentBloom.Check(s) || im.aggregatedOldBloom.Check(s)
+	return im.currentBloom.Check(s)
 }
 
 // add s to the bloom
@@ -85,6 +91,8 @@ func (im *impl) addWorkerThread() {
 	}
 }
 func (im *impl) syncWithRedis() {
+
+	// remarks: we must maintein the metalock lock in the whole process, otherwise in between step 2 and 3 can be race condition
 	im.metaLock.RLock()
 	defer im.metaLock.RUnlock()
 
@@ -180,28 +188,25 @@ func (im *impl) rotation(currentTime time.Time) {
 	im.locationLock.Unlock()
 
 	// step 2: swap the current bloom
+	prevCurrentBloom := im.currentBloom
 	im.oldBlooms[im.oldestIndex] = im.currentBloom
 	im.currentBloom = NewBloom(im.m, im.k)
 
 	im.metaLock.Unlock()
 
 	// step 3: sync back all the location back to redis
-	im.metaLock.RLock()
-	candidates, _ := im.getUploadCandidates(im.oldBlooms[im.oldestIndex], prevLocations, true)
-	im.metaLock.RUnlock()
+	candidates, _ := im.getUploadCandidates(prevCurrentBloom, prevLocations, true)
 	im.uploadLocations(oldTime, candidates)
 
 	// step 4: sleep for 5 seconds to ensure all mechanism finished the upload of pervious interval's location
 	time.Sleep(previousIntervalWaitTime)
 
-	// FIXME: there is race condition here
 	// step 5: download the finalized pervious interval's bloom from redis
-	im.downloadFromRedis(oldTime, im.oldBlooms[im.oldestIndex])
+	im.downloadFromRedis(oldTime, prevCurrentBloom)
 
 	// step 6: rebuild the agg
 	im.metaLock.Lock()
 	im.rebuildAgg()
-	im.metaLock.Unlock()
 
 	// step 7: finally, move the index of the rotation
 	if im.oldestIndex == len(im.oldBlooms)-1 {
@@ -209,4 +214,5 @@ func (im *impl) rotation(currentTime time.Time) {
 	} else {
 		im.oldestIndex = im.oldestIndex + 1
 	}
+	im.metaLock.Unlock()
 }
