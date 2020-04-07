@@ -6,22 +6,11 @@ package bloom
 
 */
 import (
-	"math/rand"
 	"testing"
 
 	"github.com/go-redis/redis"
 	"github.com/stretchr/testify/assert"
 )
-
-// copied from https://stackoverflow.com/questions/22892120/how-to-generate-a-random-string-of-a-fixed-length-in-go/22892986#22892986
-func randString(n int) string {
-	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890")
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
-}
 
 func TestAddandCheck(t *testing.T) {
 	m := 10001
@@ -37,7 +26,7 @@ func TestAddandCheck(t *testing.T) {
 
 		// add the input
 		for a := 0; a < inputCount; a++ {
-			s := randString(inputLength)
+			s := RandString(inputLength)
 			input = append(input, s)
 			bloom.Add(s)
 		}
@@ -49,7 +38,7 @@ func TestAddandCheck(t *testing.T) {
 
 		// verify some random string
 		for a := 0; a < 10; a++ {
-			s := randString(inputLength)
+			s := RandString(inputLength)
 			assert.False(t, bloom.Check(s))
 		}
 
@@ -94,7 +83,7 @@ func TestGetLocations(t *testing.T) {
 	result := make([]int, m, m)
 
 	for i := 0; i < round; i++ {
-		s := randString(inputLength)
+		s := RandString(inputLength)
 
 		for _, loc := range getLocations(s, m, k) {
 			result[loc]++

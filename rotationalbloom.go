@@ -28,13 +28,16 @@ type Config struct {
 
 	// FIXME: the interval between the synchronization with redis
 	SyncInterval time.Duration
+
+	// the number of location uploaded per sync
+	UploadPerSync int
 }
 
 type RotationalBloom interface {
 	SetIntervalNum(n int)
 
 	// return the appx number of unique string
-	GetAppxCount() int
+	GetAppxCount() float64
 
 	Check(s string) bool
 
